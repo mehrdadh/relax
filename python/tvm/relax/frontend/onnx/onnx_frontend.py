@@ -1894,7 +1894,7 @@ class ONNXGraphImporter:
 
     def _construct_nodes(self, graph: onnx.onnx_ml_pb2.GraphProto):
         """Nodes are stored as directed acyclic graph."""
-        for node_index, node in enumerate(graph.node):
+        for node in graph.node:
             op_name = node.op_type
             attr = self._parse_attr(node.attribute)
             # Create and populate input list.
@@ -1922,7 +1922,8 @@ class ONNXGraphImporter:
                 ):
                     raise ValueError(f"Node {node.name} cannot handle ShapeExpr inputs.")
 
-            op = self._convert_operator(op_name, node_index, inputs, attr, self.opset)
+            node_id = int(node.name.split("_")[1])
+            op = self._convert_operator(op_name, node_id, inputs, attr, self.opset)
             # Create struct information for the new operator.
             op = self.bb.normalize(op)
 
@@ -1989,7 +1990,7 @@ class ONNXGraphImporter:
         return attrs
 
     def _convert_operator(
-        self, op_name: str, node_index: int, inputs: List[relax.Function], attrs: Dict, opset: int
+        self, op_name: str, node_id: int, inputs: List[relax.Function], attrs: Dict, opset: int
     ) -> relax.Function:
         """Convert ONNX operator into a Relax operator.
         The converter must specify conversions explicitly for incompatible name, and
@@ -1999,8 +2000,8 @@ class ONNXGraphImporter:
         ----------
         op_name : str
             Operator name, such as Convolution, FullyConnected
-        node_index : int
-            Index of the node in the ONNX graph.
+        node_id : int
+            Unique ide of the node in the ONNX graph.
         inputs : list of tvm.relax.function.Function
             List of inputs.
         attrs : dict
@@ -2016,7 +2017,7 @@ class ONNXGraphImporter:
         if op_name in convert_map:
             convert_class = convert_map[op_name]
             op_function = convert_class.get_converter(opset)
-            span = tvm.ir.Span(tvm.ir.SourceName(op_name), node_index, node_index, 0, 0)
+            span = tvm.ir.Span(tvm.ir.SourceName(op_name), node_id, node_id, 0, 0)
             with relax.frontend.SpanContext(span):
                 sym = op_function(self.bb, inputs, attrs)
         else:
@@ -2080,6 +2081,7 @@ def from_onnx(
 
     g = ONNXGraphImporter(shape_dict, dtype_dict, sanitize_input_names)
     graph = model.graph
+#    print("NODES-IMP", [n.name for n in model.graph.node[:10]])
 
     try:
         opset_in_model = 1
